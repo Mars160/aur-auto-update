@@ -66,6 +66,34 @@ packages_to_push() {
   } | sort -u
 }
 
+prepare_aur_worktree() {
+  local pkgbase=$1
+  local aur_dir=$2
+  local remote_url="ssh://aur@aur.archlinux.org/${pkgbase}.git"
+  local remote_heads
+  local status
+
+  mkdir -p "$aur_dir"
+  git -C "$aur_dir" -c init.defaultBranch=master init
+  git -C "$aur_dir" remote add origin "$remote_url"
+
+  set +e
+  remote_heads=$(git -C "$aur_dir" ls-remote --heads origin master 2>&1)
+  status=$?
+  set -e
+
+  if [[ "$status" -ne 0 ]]; then
+    printf '%s\n' "$remote_heads" >&2
+    die "could not access AUR remote for ${pkgbase}; check AUR_SSH_PRIVATE_KEY and AUR package permissions"
+  fi
+
+  if [[ -n "$remote_heads" ]]; then
+    git -C "$aur_dir" pull --ff-only origin master
+  else
+    printf '%s has no remote master branch yet; preparing initial AUR push\n' "$pkgbase"
+  fi
+}
+
 need_cmd awk
 need_cmd git
 need_cmd rsync
@@ -118,7 +146,7 @@ for package_name in "${packages[@]}"; do
   aur_dir="${tmpdir}/${pkgbase}"
   printf '==> pushing %s to AUR\n' "$pkgbase"
 
-  git clone "ssh://aur@aur.archlinux.org/${pkgbase}.git" "$aur_dir"
+  prepare_aur_worktree "$pkgbase" "$aur_dir"
   git -C "$aur_dir" config user.name "$git_name"
   git -C "$aur_dir" config user.email "$git_email"
 
