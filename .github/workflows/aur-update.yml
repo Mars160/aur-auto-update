@@ -48,11 +48,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- packages; then
+          packages=$(scripts/push-aur.sh --list)
+          if [[ -z "$packages" ]]; then
             echo "has_updates=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_updates=true" >> "$GITHUB_OUTPUT"
-            git diff --name-only -- packages
+            printf '%s\n' "$packages"
           fi
 
       - name: Configure AUR SSH
@@ -86,6 +87,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add packages
-          git commit -m "chore: update AUR packages"
-          git push
+          if [[ -z "$(git status --porcelain -- packages)" ]]; then
+            echo "no package files changed"
+          else
+            git add packages
+            git commit -m "chore: update AUR packages"
+            git push
+          fi

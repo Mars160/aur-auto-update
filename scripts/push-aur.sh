@@ -3,9 +3,12 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 dry_run=0
+list_only=0
 
 if [[ "${1:-}" == "--dry-run" ]]; then
   dry_run=1
+elif [[ "${1:-}" == "--list" ]]; then
+  list_only=1
 fi
 
 die() {
@@ -26,14 +29,48 @@ pkgver_from_srcinfo() {
 }
 
 changed_packages() {
-  git -C "$repo_root" diff --name-only -- packages |
+  git -C "$repo_root" status --porcelain -- packages |
+    sed -E 's/^...//' |
     awk -F/ '$1 == "packages" && NF >= 3 { print $2 }' |
     sort -u
+}
+
+version_pending_packages() {
+  local package_dir package_name pkgver now_version_file now_version
+
+  for package_dir in "${repo_root}"/packages/*; do
+    [[ -d "$package_dir" ]] || continue
+    [[ -f "${package_dir}/PKGBUILD" ]] || continue
+    [[ -f "${package_dir}/.SRCINFO" ]] || continue
+
+    package_name=$(basename "$package_dir")
+    pkgver=$(pkgver_from_srcinfo "$package_dir")
+    now_version_file="${package_dir}/NOW_VERSION"
+
+    if [[ ! -f "$now_version_file" ]]; then
+      printf '%s\n' "$package_name"
+      continue
+    fi
+
+    now_version=$(tr -d '[:space:]' < "$now_version_file")
+    if [[ "$now_version" != "$pkgver" ]]; then
+      printf '%s\n' "$package_name"
+    fi
+  done
+}
+
+packages_to_push() {
+  {
+    changed_packages
+    version_pending_packages
+  } | sort -u
 }
 
 need_cmd awk
 need_cmd git
 need_cmd rsync
+need_cmd sed
+need_cmd tr
 
 config_file="${repo_root}/config/VARS.sh"
 if [[ -f "$config_file" ]]; then
@@ -44,10 +81,17 @@ fi
 git_name=${NAME:-aur-auto-update}
 git_email=${EMAIL:-aur-auto-update@users.noreply.github.com}
 
-mapfile -t packages < <(changed_packages)
+mapfile -t packages < <(packages_to_push)
 
 if [[ "${#packages[@]}" -eq 0 ]]; then
-  printf 'no package changes to push to AUR\n'
+  if [[ "$list_only" -eq 0 ]]; then
+    printf 'no package changes to push to AUR\n'
+  fi
+  exit 0
+fi
+
+if [[ "$list_only" -eq 1 ]]; then
+  printf '%s\n' "${packages[@]}"
   exit 0
 fi
 
@@ -84,6 +128,7 @@ for package_name in "${packages[@]}"; do
     --exclude '.git'
     --exclude '.aurignore'
     --exclude 'update.sh'
+    --exclude 'NOW_VERSION'
   )
 
   if [[ -f "${package_dir}/.aurignore" ]]; then
@@ -94,10 +139,12 @@ for package_name in "${packages[@]}"; do
 
   if [[ -z "$(git -C "$aur_dir" status --porcelain)" ]]; then
     printf '%s has no AUR content changes after sync\n' "$pkgbase"
+    printf '%s\n' "$pkgver" > "${package_dir}/NOW_VERSION"
     continue
   fi
 
   git -C "$aur_dir" add -A
   git -C "$aur_dir" commit -m "Update ${pkgbase} to ${pkgver}"
   git -C "$aur_dir" push origin master
+  printf '%s\n' "$pkgver" > "${package_dir}/NOW_VERSION"
 done
