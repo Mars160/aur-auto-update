@@ -74,18 +74,29 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$AUR_SSH_PRIVATE_KEY"
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
-          cat > ~/.ssh/config <<'EOF'
+          ssh_dir="${HOME}/.ssh"
+          install -d -m 700 "$ssh_dir"
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "${ssh_dir}/aur"
+          chmod 600 "${ssh_dir}/aur"
+          ssh-keyscan -T 30 -t rsa,ecdsa,ed25519 aur.archlinux.org > "${ssh_dir}/known_hosts"
+          test -s "${ssh_dir}/known_hosts"
+          chmod 600 "${ssh_dir}/known_hosts"
+          cat > "${ssh_dir}/config" <<EOF
           Host aur.archlinux.org
             HostName aur.archlinux.org
             User aur
-            IdentityFile ~/.ssh/aur
+            IdentityFile ${ssh_dir}/aur
+            UserKnownHostsFile ${ssh_dir}/known_hosts
             IdentitiesOnly yes
+            StrictHostKeyChecking yes
           EOF
-          chmod 600 ~/.ssh/config
+          chmod 600 "${ssh_dir}/config"
+          ssh -F "${ssh_dir}/config" -o BatchMode=yes -T aur.archlinux.org || {
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+          }
 
       - name: Push updated packages to AUR
         if: steps.changes.outputs.has_updates == 'true'
