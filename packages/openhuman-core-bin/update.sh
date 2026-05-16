@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+package_dir=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "${package_dir}/../.." && pwd)
+
+cd "$package_dir"
 
 pkgbuild="PKGBUILD"
 
@@ -32,6 +35,18 @@ update_assignment() {
   sed -i -E "s|^${key}=.*|${key}=${value}|" "$pkgbuild"
 }
 
+update_maintainer() {
+  [[ -n "${NAME:-}" && -n "${EMAIL:-}" ]] || return 0
+
+  local maintainer="# Maintainer: ${NAME} <${EMAIL}>"
+
+  if grep -q '^# Maintainer:' "$pkgbuild"; then
+    sed -i -E "s|^# Maintainer:.*|${maintainer}|" "$pkgbuild"
+  else
+    sed -i "1i${maintainer}" "$pkgbuild"
+  fi
+}
+
 update_sum_array() {
   local key=$1
   local value=$2
@@ -45,10 +60,18 @@ source_pkgbuild() {
 }
 
 need_cmd curl
+need_cmd grep
 need_cmd sed
 need_cmd sha256sum
 
 [[ -f "$pkgbuild" ]] || die "PKGBUILD not found"
+
+if [[ -f "${repo_root}/config/VARS.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${repo_root}/config/VARS.sh"
+fi
+
+update_maintainer
 
 source_pkgbuild
 
