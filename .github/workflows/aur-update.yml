@@ -4,6 +4,14 @@ on:
   schedule:
     - cron: '17 2 * * *'
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/aur-update.yml'
+      - 'config/**'
+      - 'packages/**'
+      - 'scripts/**'
 
 permissions:
   contents: write
@@ -51,8 +59,10 @@ jobs:
           packages=$(scripts/push-aur.sh --list)
           if [[ -z "$packages" ]]; then
             echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            echo "no packages need AUR push"
           else
             echo "has_updates=true" >> "$GITHUB_OUTPUT"
+            echo "packages needing AUR push:"
             printf '%s\n' "$packages"
           fi
 
