@@ -1,0 +1,91 @@
+name: Update AUR packages
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aur-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+
+    steps:
+      - name: Install tools
+        run: pacman -Sy --noconfirm --needed git openssh curl ca-certificates rsync
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          source config/VARS.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "$NAME"
+          git config --global user.email "$EMAIL"
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Check package updates
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: runuser -u builder -- env GITHUB_TOKEN="${GITHUB_TOKEN}" scripts/update-all.sh
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- packages; then
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+            git diff --name-only -- packages
+          fi
+
+      - name: Configure AUR SSH
+        if: steps.changes.outputs.has_updates == 'true'
+        shell: bash
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$AUR_SSH_PRIVATE_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            HostName aur.archlinux.org
+            User aur
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Push updated packages to AUR
+        if: steps.changes.outputs.has_updates == 'true'
+        shell: bash
+        run: scripts/push-aur.sh
+
+      - name: Commit updated package files
+        if: steps.changes.outputs.has_updates == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add packages
+          git commit -m "chore: update AUR packages"
+          git push
