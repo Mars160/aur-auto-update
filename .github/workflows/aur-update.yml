@@ -78,9 +78,6 @@ jobs:
           install -d -m 700 "$ssh_dir"
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "${ssh_dir}/aur"
           chmod 600 "${ssh_dir}/aur"
-          ssh-keygen -y -P '' -f "${ssh_dir}/aur" > "${ssh_dir}/aur.pub"
-          echo "AUR SSH public key fingerprint:"
-          ssh-keygen -lf "${ssh_dir}/aur.pub"
           ssh-keyscan -T 30 -t rsa,ecdsa,ed25519 aur.archlinux.org > "${ssh_dir}/known_hosts"
           test -s "${ssh_dir}/known_hosts"
           chmod 600 "${ssh_dir}/known_hosts"
@@ -94,6 +91,7 @@ jobs:
             StrictHostKeyChecking yes
           EOF
           chmod 600 "${ssh_dir}/config"
+          echo "GIT_SSH_COMMAND=ssh -F ${ssh_dir}/config -o BatchMode=yes" >> "$GITHUB_ENV"
           ssh -F "${ssh_dir}/config" -o BatchMode=yes -T aur.archlinux.org || {
             status=$?
             if [[ "$status" -ne 1 ]]; then
