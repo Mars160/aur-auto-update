@@ -75,6 +75,7 @@ prepare_aur_worktree() {
 
   mkdir -p "$aur_dir"
   git -C "$aur_dir" -c init.defaultBranch=master init
+  git config --global --add safe.directory "$aur_dir"
   git -C "$aur_dir" remote add origin "$remote_url"
 
   set +e
@@ -140,6 +141,7 @@ for package_name in "${packages[@]}"; do
 
   pkgbase=$(pkgbase_from_srcinfo "$package_dir")
   pkgver=$(pkgver_from_srcinfo "$package_dir")
+  aur_status=
   [[ -n "$pkgbase" ]] || die "could not read pkgbase from ${package_name}/.SRCINFO"
   [[ -n "$pkgver" ]] || die "could not read pkgver from ${package_name}/.SRCINFO"
 
@@ -165,7 +167,8 @@ for package_name in "${packages[@]}"; do
 
   rsync "${rsync_args[@]}" "${package_dir}/" "${aur_dir}/"
 
-  if [[ -z "$(git -C "$aur_dir" status --porcelain)" ]]; then
+  aur_status=$(git -C "$aur_dir" status --porcelain) || die "could not inspect AUR worktree status for ${pkgbase}"
+  if [[ -z "$aur_status" ]]; then
     printf '%s has no AUR content changes after sync\n' "$pkgbase"
     printf '%s\n' "$pkgver" > "${package_dir}/NOW_VERSION"
     continue
@@ -173,6 +176,6 @@ for package_name in "${packages[@]}"; do
 
   git -C "$aur_dir" add -A
   git -C "$aur_dir" commit -m "Update ${pkgbase} to ${pkgver}"
-  git -C "$aur_dir" push origin master
+  git -C "$aur_dir" push origin HEAD:master
   printf '%s\n' "$pkgver" > "${package_dir}/NOW_VERSION"
 done
