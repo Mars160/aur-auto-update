@@ -156,6 +156,7 @@ for package_name in "${packages[@]}"; do
     -a
     --delete
     --exclude '.git'
+    --exclude '.gitignore'
     --exclude '.aurignore'
     --exclude 'update.sh'
     --exclude 'NOW_VERSION'
@@ -177,5 +178,6 @@ for package_name in "${packages[@]}"; do
   git -C "$aur_dir" add -A
   git -C "$aur_dir" commit -m "Update ${pkgbase} to ${pkgver}"
   git -C "$aur_dir" push origin HEAD:master
+  git -C "$aur_dir" ls-remote --exit-code --heads origin master >/dev/null
   printf '%s\n' "$pkgver" > "${package_dir}/NOW_VERSION"
 done
