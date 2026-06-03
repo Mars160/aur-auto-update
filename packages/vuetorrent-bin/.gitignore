@@ -1,0 +1,7 @@
+*
+!/.gitignore
+!/.aurignore
+!/.SRCINFO
+!/NOW_VERSION
+!/PKGBUILD
+!/update.sh
