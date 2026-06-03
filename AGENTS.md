@@ -40,6 +40,8 @@ When editing shell scripts, run `shellcheck` if available. For package changes, 
 
 Recent commits use concise Conventional Commit-style messages, mainly `chore: update AUR packages` and `fix: ...`. Keep the subject imperative and specific, for example `fix: handle missing .SRCINFO`.
 
+Do not include `NOW_VERSION` changes in GitHub commits. Treat `NOW_VERSION` as local publish state updated by `push-aur.sh`, not as package source metadata.
+
 Pull requests should include affected package names, commands run, and whether AUR publishing was dry-run or completed. Link related issues when available. Include output snippets for version bumps, checksum changes, or publishing failures.
 
 ## Security & Configuration Tips
